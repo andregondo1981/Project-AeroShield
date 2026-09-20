@@ -1,5 +1,6 @@
 # Stage 1: Build/Asset Preparation
-FROM alpine:3.19 AS builder
+FROM alpine:latest AS builder
+RUN apk update && apk upgrade 
 WORKDIR /app
 COPY index.html .
 
