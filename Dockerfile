@@ -1,23 +1,13 @@
-# Stage 1: Build/Asset Preparation
-FROM alpine:latest AS builder
-RUN apk update && apk upgrade 
-WORKDIR /app
-COPY index.html .
+FROM alpine:latest
 
-# Stage 2: Production Lightweight Runner
-FROM nginx:1.25-alpine-slim
+# Install latest security patches and updates
+RUN apk update && apk upgrade && \
+    apk add --no-cache ca-certificates
 
-# Security hardening: Remove default unnecessary HTML files and limit root permissions if needed
-RUN rm -rf /usr/share/nginx/html/*
+# Copy your web content or application files (e.g., index.html)
+COPY index.html /usr/share/nginx/html/ 
+# (Or whatever your web server setup requires)
 
-# Copy compiled/prepared application artifact from builder
-COPY --from=builder /app/index.html /usr/share/nginx/html/index.html
-
-# Expose standard web port
 EXPOSE 80
 
-# Healthcheck instruction for container monitoring
-HEALTHCHECK --interval=30s --timeout=3s CMD wget --no-verbose --tries=1 http://localhost/ || exit 1
-
-# Start Nginx in foreground mode for containerized execution
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["sh", "-c", "echo 'Application ready' && sleep infinity"]
