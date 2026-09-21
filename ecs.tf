@@ -57,8 +57,8 @@ resource "aws_ecs_service" "app" {
 
   network_configuration {
     subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id] # Use your public subnets
-    security_groups  = [aws_security_group.ecs_tasks.id]
-    assign_public_ip = true  # Required so tasks in public subnets get a public IP to reach ECR
+    security_groups  = [aws_security_group.app_sg.id]                  # Matches the security group resource name
+    assign_public_ip = true                                            # Required so tasks in public subnets get a public IP to reach ECR
   }
 
   load_balancer {
@@ -68,33 +68,6 @@ resource "aws_ecs_service" "app" {
   }
 
   depends_on = [aws_lb_listener.http]
-}
-
-# 5. Security Group for ECS Tasks
-resource "aws_security_group" "ecs_tasks" {
-  name        = "utc-ecs-tasks-sg"
-  description = "Allow inbound access from the ALB and outbound internet access"
-  vpc_id      = aws_vpc.main.id
-
-  ingress {
-    description     = "Allow HTTP traffic from ALB"
-    from_port       = 80
-    to_port         = 80
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    description = "Allow all outbound traffic to pull images and reach updates"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "utc-ecs-tasks-sg"
-  }
 }
 
 # --- IAM Roles Required for ECS Fargate Execution ---
