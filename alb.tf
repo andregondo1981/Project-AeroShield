@@ -47,3 +47,30 @@ resource "aws_lb_listener" "http" {
     target_group_arn = aws_lb_target_group.utc_tg.arn
   }
 }
+
+# 6. Security Group for Application Load Balancer (ALB)
+resource "aws_security_group" "alb" {
+  name        = "utc-alb-sg"
+  description = "Allow inbound HTTP and HTTPS traffic from the internet"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description = "Allow HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound traffic"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "utc-alb-sg"
+  }
+}

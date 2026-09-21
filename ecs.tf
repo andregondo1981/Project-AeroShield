@@ -9,8 +9,8 @@ resource "aws_ecs_cluster" "main" {
 
 # 2. CloudWatch Log Group for ECS Container Logs
 resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/utc-application"
-  retention_in_days = 30
+  name              = "/ecs/utc-app-task" # Must match the log group name in your task definition
+  retention_in_days = 7
 }
 
 # 3. ECS Task Definition (Fargate)
@@ -47,7 +47,7 @@ resource "aws_ecs_task_definition" "app" {
   ])
 }
 
-# 4. ECS Service (Running across private subnets and attached to ALB Target Group)
+# 4. ECS Service (Running across public subnets and attached to ALB Target Group)
 resource "aws_ecs_service" "app" {
   name            = "utc-app-service"
   cluster         = aws_ecs_cluster.main.id
@@ -56,9 +56,9 @@ resource "aws_ecs_service" "app" {
   launch_type     = "FARGATE"
 
   network_configuration {
-    subnets          = [aws_subnet.private_app_1.id, aws_subnet.private_app_2.id]
-    security_groups  = [aws_security_group.app_sg.id]
-    assign_public_ip = false
+    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id] # Use your public subnets
+    security_groups  = [aws_security_group.ecs_tasks.id]
+    assign_public_ip = true  # Required so tasks in public subnets get a public IP to reach ECR
   }
 
   load_balancer {
@@ -68,6 +68,33 @@ resource "aws_ecs_service" "app" {
   }
 
   depends_on = [aws_lb_listener.http]
+}
+
+# 5. Security Group for ECS Tasks
+resource "aws_security_group" "ecs_tasks" {
+  name        = "utc-ecs-tasks-sg"
+  description = "Allow inbound access from the ALB and outbound internet access"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    description     = "Allow HTTP traffic from ALB"
+    from_port       = 80
+    to_port         = 80
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb.id]
+  }
+
+  egress {
+    description = "Allow all outbound traffic to pull images and reach updates"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "utc-ecs-tasks-sg"
+  }
 }
 
 # --- IAM Roles Required for ECS Fargate Execution ---
