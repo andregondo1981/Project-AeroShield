@@ -14,21 +14,22 @@ resource "aws_lb" "utc_alb" {
 }
 
 # Target Group
+# Target Group
 resource "aws_lb_target_group" "utc_tg" {
   name        = "utc-target-group"
   port        = 8080
   protocol    = "HTTP"
   vpc_id      = aws_vpc.main.id
-  target_type = "ip" # <--- Change this from "instance" to "ip"
+  target_type = "ip"
 
   health_check {
     path                = "/"
     protocol            = "HTTP"
-    matcher             = "200"
-    interval            = 30
-    timeout             = 5
+    matcher             = "200,302"  # <--- Updated: Accept both 200 OK and redirects
+    interval            = 60         # <--- Increased to give Spring Boot enough time to start
+    timeout             = 10         # <--- Increased timeout window
     healthy_threshold   = 2
-    unhealthy_threshold = 2
+    unhealthy_threshold = 5          # <--- More forgiving before marking unhealthy
   }
 
   tags = {
