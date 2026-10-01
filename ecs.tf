@@ -1,57 +1,49 @@
-# 3. ECS Task Definition (Fargate)
-resource "aws_ecs_task_definition" "app" {
-  family                   = "utc-app-task"
-  network_mode             = "awsvpc"
-  requires_compatibilities = ["FARGATE"]
-  cpu                      = "256"
-  memory                   = "512"
-  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
-  task_role_arn            = aws_iam_role.ecs_task_role.arn
+# Application Load Balancer spanning across 2 public subnets (Multi-AZ Redundancy)
+resource "aws_lb" "utc_alb" {
+  name               = "utc-application-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.alb_sg.id]
+  subnets            = [aws_subnet.public_1.id, aws_subnet.public_2.id]
 
-  container_definitions = jsonencode([
-    {
-      name      = "webapp"
-      image     = "nginx:1.25-alpine-slim" # Will be overwritten or updated by your CI/CD pipeline
-      essential = true
-      portMappings = [
-        {
-          containerPort = 8080  # <--- Changed from 80 to 8080
-          hostPort      = 8080  # <--- Changed from 80 to 8080
-          protocol      = "tcp"
-        }
-      ]
-      logConfiguration = {
-        logDriver = "awslogs"
-        options = {
-          "awslogs-group"         = aws_cloudwatch_log_group.ecs_logs.name
-          "awslogs-region"        = data.aws_region.current.name
-          "awslogs-stream-prefix" = "ecs"
-        }
-      }
-    }
-  ])
+  enable_deletion_protection = false
+
+  tags = {
+    Name = "utc-application-alb"
+  }
 }
 
-# 4. ECS Service (Running across public subnets and attached to ALB Target Group)
-resource "aws_ecs_service" "app" {
-  name                 = "utc-app-service"
-  cluster              = aws_ecs_cluster.main.id
-  task_definition      = aws_ecs_task_definition.app.arn
-  desired_count        = 2 
-  launch_type          = "FARGATE"
-  force_new_deployment = true # <--- Automates pipeline rollouts without manual click-ops!
+# Target Group (Configured for Port 80 to match your Dockerfile)
+resource "aws_lb_target_group" "utc_tg" {
+  name        = "utc-target-group"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
 
-  network_configuration {
-    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id] 
-    security_groups  = [aws_security_group.app_sg.id]               
-    assign_public_ip = true                                          
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
   }
 
-  load_balancer {
+  tags = {
+    Name = "utc-target-group"
+  }
+}
+
+# ALB HTTP Listener
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.utc_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
     target_group_arn = aws_lb_target_group.utc_tg.arn
-    container_name   = "webapp"
-    container_port   = 8080  # <--- Changed from 80 to 8080 to match the container mapping
   }
-
-  depends_on = [aws_lb_listener.http]
 }
