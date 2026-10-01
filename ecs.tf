@@ -1,18 +1,3 @@
-# 1. Amazon ECS Cluster
-resource "aws_ecs_cluster" "main" {
-  name = "utc-application-cluster"
-
-  tags = {
-    Name = "utc-application-cluster"
-  }
-}
-
-# 2. CloudWatch Log Group for ECS Container Logs
-resource "aws_cloudwatch_log_group" "ecs_logs" {
-  name              = "/ecs/utc-app-task" # Must match the log group name in your task definition
-  retention_in_days = 7
-}
-
 # 3. ECS Task Definition (Fargate)
 resource "aws_ecs_task_definition" "app" {
   family                   = "utc-app-task"
@@ -26,12 +11,12 @@ resource "aws_ecs_task_definition" "app" {
   container_definitions = jsonencode([
     {
       name      = "webapp"
-      image     = "nginx:1.25-alpine-slim" # Initial placeholder image before CI/CD pipeline pushes updates
+      image     = "nginx:1.25-alpine-slim" # Will be overwritten or updated by your CI/CD pipeline
       essential = true
       portMappings = [
         {
-          containerPort = 80
-          hostPort      = 80
+          containerPort = 8080  # <--- Changed from 80 to 8080
+          hostPort      = 8080  # <--- Changed from 80 to 8080
           protocol      = "tcp"
         }
       ]
@@ -49,63 +34,24 @@ resource "aws_ecs_task_definition" "app" {
 
 # 4. ECS Service (Running across public subnets and attached to ALB Target Group)
 resource "aws_ecs_service" "app" {
-  name            = "utc-app-service"
-  cluster         = aws_ecs_cluster.main.id
-  task_definition = aws_ecs_task_definition.app.arn
-  desired_count   = 2 # Multi-redundancy across AZs
-  launch_type     = "FARGATE"
+  name                 = "utc-app-service"
+  cluster              = aws_ecs_cluster.main.id
+  task_definition      = aws_ecs_task_definition.app.arn
+  desired_count        = 2 
+  launch_type          = "FARGATE"
+  force_new_deployment = true # <--- Automates pipeline rollouts without manual click-ops!
 
   network_configuration {
-    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id] # Use your public subnets
-    security_groups  = [aws_security_group.app_sg.id]                  # Matches the security group resource name
-    assign_public_ip = true                                            # Required so tasks in public subnets get a public IP to reach ECR
+    subnets          = [aws_subnet.public_1.id, aws_subnet.public_2.id] 
+    security_groups  = [aws_security_group.app_sg.id]               
+    assign_public_ip = true                                          
   }
 
   load_balancer {
     target_group_arn = aws_lb_target_group.utc_tg.arn
     container_name   = "webapp"
-    container_port   = 80
+    container_port   = 8080  # <--- Changed from 80 to 8080 to match the container mapping
   }
 
   depends_on = [aws_lb_listener.http]
-}
-
-# --- IAM Roles Required for ECS Fargate Execution ---
-resource "aws_iam_role" "ecs_execution_role" {
-  name = "utc-ecs-execution-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
-}
-
-resource "aws_iam_role_policy_attachment" "ecs_execution_role_policy" {
-  role       = aws_iam_role.ecs_execution_role.name
-  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
-}
-
-resource "aws_iam_role" "ecs_task_role" {
-  name = "utc-ecs-task-role"
-
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "ecs-tasks.amazonaws.com"
-        }
-      }
-    ]
-  })
 }
